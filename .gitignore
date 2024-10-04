@@ -1,0 +1,10 @@
+data/*
+otdd_explore/.ipynb_checkpoints
+__pycache__*
+*/.ipynb_checkpoints/*
+.ipynb_checkpoints
+.ignore
+script_slurm/job_log/
+script_slurm/log/
+plots/
+*.png

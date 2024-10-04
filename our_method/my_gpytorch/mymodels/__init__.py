@@ -1,0 +1,3 @@
+from .my_exact_GP import ExactGPRegressionModel, ExactGPRegression_
+from .my_exact_GP_ScaleKernel import OT_ExactGPRegressionScaleModel, Base_GPRegressionModel, ExactGPScaleRegression_
+from .my_SWEL_model import OT_SWEL_Model, MBS_mapping_label
