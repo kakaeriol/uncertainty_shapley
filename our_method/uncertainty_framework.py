@@ -14,7 +14,6 @@ from copy import deepcopy,copy
 # from xgboost import XGBClassifier
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import classification_report, confusion_matrix, auc, accuracy_score
-from CNN_model import LinearRegression, CNN
 import torch
 import torch.nn as nn
 

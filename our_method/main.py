@@ -26,7 +26,7 @@ import multiprocessing
 import time
 model_dict = {
     "Net": Net, 
-    # "MNIST_CNN", 
+    "MLPRegressor": MLPRegressor,
     "ResNet_18_Classifier": ResNet_18_Classifier, 
     "CNNRegressor": CNNRegressor
     
@@ -37,18 +37,20 @@ kernel_dict = {
     "base": RBFKernel
 }
 def load_data(data_path, options={}):
-    ds = pd.read_pickle(data_path)
-    # print(ds.keys())
+    with open(data_path, 'rb') as file:
+        data_bytes = file.read()
+        ds = dill.loads(data_bytes)
+    print(ds.keys())
     v_values = ds.get("v_value", None)
     if v_values is not None:
         v_values = torch.tensor(v_values)
     X_train = ds["X_train"]
-    y_train = ds["y_train"]
+    y_train = np.array(ds["y_train"])
     X_val = ds["X_val"]
-    y_val = ds["y_val"]
+    y_val = np.array(ds["y_val"])
     idx_party = ds["idx_party"]
     dataset = []
-    for idx in set(idx_party):
+    for idx in np.unique(idx_party):
         ids = My_Single_Dataset(torch.tensor(X_train[idx_party == idx]), torch.tensor(y_train[idx_party == idx]))
         dataset.append(ids)
     n_parties = len(np.unique(idx_party))
@@ -90,9 +92,9 @@ def __main__(args):
 
     #
     output_path = os.path.join(output_folder,
-                          "{}_{}_r{}_a{}_seed{}_ey{}.pickle".format(output_name, args.kernel, n_random, n_active, args.seed, n_embed))
+                          "{}_{}_r{}_a{}_seed{}_ey{}_eta_{}.pickle".format(output_name, args.kernel, n_random, n_active, args.seed, n_embed, args.eta))
     f_model_path = os.path.join(output_folder,"f_model{}_{}_r{}_a{}_seed{}_ey{}.ph".format(output_name, args.kernel, n_random, n_active, args.seed, n_embed))
-      
+    print(args, embding_func)
     start = time.time()
     my_framework = uncertainty_framework(
         dataset=dataset, 
@@ -121,9 +123,9 @@ if __name__ == "__main__":
     parser.add_argument('--embd', '--verbose',
                         action='store_true') 
     # our kernel parameters
-    parser.add_argument("--device_ids", type=list, default=[]) 
-    parser.add_argument("--chunk_size", type=list, default=100)
-    parser.add_argument("--n_jobs", type=list, default=3)
+    parser.add_argument("--device_ids", nargs='+', type=int, default=[]) 
+    parser.add_argument("--chunk_size", type=int, default=100)
+    parser.add_argument("--n_jobs", type=int, default=3)
     parser.add_argument("--n_projections", type=int, default=100)
     parser.add_argument("--output_dim", type=int, default=2) #0, x only, -1 : 1 hot, -2: y only
     parser.add_argument("--update_interval", type=int, default=0)
@@ -131,7 +133,7 @@ if __name__ == "__main__":
     # model aggregate
     parser.add_argument("--model_aggregate", type=str, default="Net",
                         help = "Model for aggregate all data",
-                        choices = ["Net", "MNIST_CNN", "ResNet_18_Classifier", "CNNRegressor"])
+                        choices = ["Net", "MNIST_CNN", "ResNet_18_Classifier", "CNNRegressor", "MLPRegressor"])
     #  
     # GP kernel
     parser.add_argument("--training_iteration", default=100, type=int,
@@ -153,6 +155,7 @@ if __name__ == "__main__":
                         help="Path to output")
 
     parser.add_argument("--load_data", type=str, default="dsconcat")
+    parser.add_argument("--eta", type=float, default=0.5) 
     
     args = parser.parse_args()
 

@@ -9,7 +9,7 @@ import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
 from torcheval.metrics import R2Score
-# from sklearn.metrics import r2_score
+from sklearn.metrics import r2_score
 from torch.nn import L1Loss
 
 MODELS_DIR = "/external1/nguyenpham/model" 
@@ -328,75 +328,58 @@ class CNNRegressor(nn.Module): # use for calihouse
         x = self.regressor(x)
         return x
 
-    def train_model(self, train_loader, val_loader=None, num_epochs=50, learning_rate=0.001, device = None):
+    def train_model(self, train_loader, val_loader=None, num_epochs=50, learning_rate=0.001, device=None):
         if device is None:
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.to(device)
-
-        # criterion = nn.MSELoss()
-        criterion = nn.L1Loss()
+    
+        criterion = nn.MSELoss()
         optimizer = optim.Adam(self.parameters(), lr=learning_rate)
-
-        for epoch in range(100):
+    
+        for epoch in range(num_epochs):
             self.train()
             running_loss = 0.0
             total_samples = 0
-
+    
             for inputs, targets in train_loader:
                 inputs = inputs.to(device).float()
                 targets = targets.to(device).float()
                 if inputs.dim() == 2:
                     inputs = inputs.unsqueeze(2)
                 optimizer.zero_grad()
-
+    
                 outputs = self(inputs).squeeze()
-                
+    
                 loss = criterion(outputs, targets)
                 loss.backward()
                 optimizer.step()
-
+    
                 running_loss += loss.item() * inputs.size(0)
                 total_samples += inputs.size(0)
-
+    
             epoch_loss = running_loss / total_samples
             # print(f'Epoch {epoch+1}/{num_epochs}, Loss: {epoch_loss:.4f}')
-
+    
             if val_loader:
-                return self.evaluate(val_loader)
+                return self.evaluate(val_loader, device)
 
-    def evaluate(self, data_loader, device = None):
+    def evaluate(self, data_loader, device=None):
         if device is None:
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.eval()
-        running_loss = 0.0
-        total_samples = 0
-        criterion = R2Score()
-        criterion = criterion.to(device)
-
-        dataset = data_loader.dataset
+        criterion = R2Score().to(device)
+    
         with torch.no_grad():
-            inputs = dataset.data.to(device).float()
-            if inputs.dim() == 2:
-                inputs = inputs.unsqueeze(2)
-            targets = dataset.targets.to(device).float()
-            outputs = self(inputs).squeeze()
-            # epoch_loss = criterion(targets, outputs)
-            criterion.update(outputs, targets)
-            epoch_loss = criterion.compute()
-            # for inputs, targets in data_loader:
-            #     inputs = inputs.to(device).float()
-            #     targets = targets.to(device).float()
-            #     if inputs.dim() == 2:
-            #         inputs = inputs.unsqueeze(2)
-            #     outputs = self(inputs).squeeze()
-            #     loss = criterion(outputs, targets)
-
-            #     running_loss += loss.item() * inputs.size(0)
-            #     total_samples += inputs.size(0)
-
-        # epoch_loss = running_loss / total_samples
-        # print(f'Validation Loss: {epoch_loss:.4f}')
-        return None, epoch_loss # dont have accuracy
+            for inputs, targets in data_loader:
+                inputs = inputs.to(device).float()
+                targets = targets.to(device).float()
+                if inputs.dim() == 2:
+                    inputs = inputs.unsqueeze(2)
+                outputs = self(inputs).squeeze()
+                criterion.update(outputs, targets)
+    
+        epoch_r2 = criterion.compute().item()
+        return None, epoch_r2
 
     def predict(self, data_loader):
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -416,3 +399,89 @@ class CNNRegressor(nn.Module): # use for calihouse
     def save(self):
         state_dict = self.state_dict()
         torch.save(state_dict, self.model_path)
+
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torchmetrics import R2Score
+
+class MLPRegressor(nn.Module):
+    def __init__(self, input_size, num_outputs=1):
+        super(MLPRegressor, self).__init__()
+        self.model = nn.Sequential(
+            nn.Linear(input_size, 16),
+            nn.ReLU(),
+            nn.Linear(16, 8),
+            nn.ReLU(),
+            nn.Linear(8, num_outputs)
+        )
+
+    def forward(self, x):
+        return self.model(x)
+    def train_model(self, train_loader, val_loader=None, num_epochs=50, learning_rate=0.001, device=None):
+        if device is None:
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.to(device)
+    
+        criterion = nn.MSELoss()
+        optimizer = optim.Adam(self.parameters(), lr=learning_rate)
+    
+        for epoch in range(num_epochs):
+            self.train()
+            running_loss = 0.0
+            total_samples = 0
+    
+            for inputs, targets in train_loader:
+                inputs = inputs.to(device).float()
+                inputs = inputs.unsqueeze(1)
+                targets = targets.to(device).float()
+                optimizer.zero_grad()
+    
+                outputs = self(inputs)
+                
+                
+                outputs = outputs.squeeze(-1).squeeze(-1)  # Adjust outputs shape
+    
+                # Ensure outputs and targets have the same shape
+    
+                loss = criterion(outputs, targets)
+                loss.backward()
+                optimizer.step()
+    
+                running_loss += loss.item() * inputs.size(0)
+                total_samples += inputs.size(0)
+
+    
+            epoch_loss = running_loss / total_samples
+            # print(f'Epoch {epoch+1}/{num_epochs}, Loss: {epoch_loss:.4f}')
+
+            # if val_loader:
+            #     _, val_r2 = self.evaluate(val_loader, device)
+            #     print(f'Validation R2 Score: {val_r2:.4f}')
+    
+            if val_loader:
+                return self.evaluate(val_loader, device)
+
+    def evaluate(self, data_loader, device=None):
+        if device is None:
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.eval()
+        criterion = R2Score().to(device)
+
+        inputs, targets = data_loader.dataset.data,  data_loader.dataset.targets.cpu()
+        inputs = inputs.unsqueeze(1).to(device).float()
+        output = self(inputs).squeeze(-1).squeeze(-1).cpu()
+        # print(output.shape, targets.shape)
+        epoch_r2=r2_score(output.detach().numpy(),targets)
+        # with torch.no_grad():
+        #     for inputs, targets in data_loader:
+        #         inputs = inputs.to(device).float()
+        #         inputs = inputs.unsqueeze(1)
+        #         targets = targets.to(device).float()
+        #         outputs = outputs.squeeze(-1)
+        #         criterion.update(outputs, targets)
+    
+        # epoch_r2 = criterion.compute().item()
+        return None, epoch_r2
+        
