@@ -47,12 +47,14 @@ pip install -r requirements.txt
 ```
 python main.py --data ${data} --device ${device} --embd --n_projections 100  --output_dim ${dim} --model_aggregate ${model} --training_iteration 100 --kernel ${kernel} --n_random $j  --n_active 0 --out_dir ${out_dir} --seed $i
 ```
-Where:
-${data}: Path or directory containing the dataset.
-${device}: GPU device(s) to be used (e.g., cuda:0).
-${model}: Choose among "Net", "MNIST_CNN", "ResNet_18_Classifier", "CNNRegressor", or "MLPRegressor".
-${kernel}: Choose one of "My_OTDD_SW_Kernel", "Exponential_SW_Kernel", or "base".
-To evaluate all utility functions without prediction, set:
+Parameters
+--data ${data}: Path or directory containing your dataset.
+--device ${device}: GPU device(s) to be used (e.g., cuda:0).
+--model_aggregate ${model}: Choose from "Net", "MNIST_CNN", "ResNet_18_Classifier", "CNNRegressor", or "MLPRegressor".
+--kernel ${kernel}: Choose from "My_OTDD_SW_Kernel", "Exponential_SW_Kernel", or "base".
+--n_random $j and --n_active 0: Control how many coalitions are randomly evaluated and how many are actively selected.
+--seed $i: Random seed for reproducibility.
+To evaluate all utility functions without any prediction, set:
 ```
 n_random = 0
 n_active = 0
