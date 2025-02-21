@@ -251,8 +251,8 @@ class ResNet_18_Classifier(nn.Module): ## use for cifar
 
             # print(f'Epoch {epoch+1}/{num_epochs} - Loss: {epoch_loss:.4f} - Acc: {epoch_acc:.4f}')
 
-            if val_loader:
-                return self.evaluate(val_loader)
+        if val_loader:
+            return self.evaluate(val_loader, device)
 
     def evaluate(self, data_loader, device=None):
         if device is None:
@@ -360,8 +360,8 @@ class CNNRegressor(nn.Module): # use for calihouse
             epoch_loss = running_loss / total_samples
             # print(f'Epoch {epoch+1}/{num_epochs}, Loss: {epoch_loss:.4f}')
     
-            if val_loader:
-                return self.evaluate(val_loader, device)
+        if val_loader:
+            return self.evaluate(val_loader, device)
 
     def evaluate(self, data_loader, device=None):
         if device is None:
@@ -460,8 +460,8 @@ class MLPRegressor(nn.Module):
             #     _, val_r2 = self.evaluate(val_loader, device)
             #     print(f'Validation R2 Score: {val_r2:.4f}')
     
-            if val_loader:
-                return self.evaluate(val_loader, device)
+        if val_loader:
+            return self.evaluate(val_loader, device)
 
     def evaluate(self, data_loader, device=None):
         if device is None:

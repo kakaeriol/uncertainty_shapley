@@ -28,6 +28,8 @@ from my_gpytorch.dataset import *
 from my_gpytorch.mymodels import OT_SWEL_Model
 #
 import random
+from joblib import Parallel, delayed
+
 def compute_weight(x):
     ll = []
     n = len(x)
@@ -45,13 +47,63 @@ def flatten_single(idataset):
     if idataset.data.ndim == 3:
         return idataset
     x = idataset.data
-    x = x.view(x.size(0), -1) .float()
+    x = x.view(x.size(0), -1) .double()
     labels = idataset.targets
     return My_Single_Dataset(x, labels)
 
 def map3c_1c(dataset):
     return [flatten_single(i) for i in dataset]
     
+def get_available_devices():
+    if torch.cuda.is_available():
+        return list(range(torch.cuda.device_count()))
+    else:
+        return [None]  # Or handle CPU case as needed
+
+def utility_compute(ic, T, dataset, testset, arg_model, item_train, seed=3, device='cpu'):
+    if ic in item_train:
+        return ic, item_train[ic]
+    
+    c = T[ic]
+    _set_random_seed(seed)
+    list_parties = utils.from_coalition_to_list([c])[0]
+    ds = load_dataset(list_parties, dataset, "dlconcat", batch_size=256)
+    n_label = ds.dataset.num_class
+    
+    if n_label == 1:
+        targets = testset.dataset.targets
+        rs = (ds.dataset.targets[0] == targets).sum().item() / len(targets)
+        rs = torch.tensor(rs)
+    else:
+        aggregate_model = _init_aggregate_model(arg_model, testset)  # Modify as needed
+        if device is not None:
+            aggregate_model.to(device)  # Move model to the specified device
+        acc, loss = aggregate_model.train_model(
+            ds,
+            val_loader=testset,
+            num_epochs=100,
+            learning_rate=0.001,
+            device=device if device is not None else 'cpu'  # Ensure training uses the correct device
+        )
+        rs = acc if acc is not None else loss
+        if isinstance(rs, torch.FloatTensor):
+            rs = rs.cpu()
+    return ic, rs
+
+
+def _init_aggregate_model(aggregate_model,testset):
+    if aggregate_model is None:
+        aggregate_model = Net
+    if aggregate_model is CNNRegressor:
+        num_class = 1
+    else:
+        num_class = testset.dataset.num_class
+
+    if aggregate_model is ResNet_18_Classifier:
+        aggregate_model = aggregate_model(num_class) # only use for cifar
+    else:
+        aggregate_model = aggregate_model(testset.dataset.data.shape[1], num_class)
+    return aggregate_model
     
 @dataclass    
 class uncertainty_framework(object):
@@ -90,7 +142,6 @@ class uncertainty_framework(object):
             y_train = self._get_vT(self.indx_rd)
             self.y_train_add = y_train
             print("Start framework")
-            print(X_train, y_train)
             self.my_model = ExactGPScaleRegression_(X_train, y_train, self.kernel, 
                                                     map3c_1c(self.dataset),args=self.args,
                                                     regression_model=self.regression_model,
@@ -100,7 +151,7 @@ class uncertainty_framework(object):
             print("Start Fitting")
             self.my_model.fit(learning_rate=self.args.learning_rate, 
                               training_iteration=self.args.training_iteration,
-                              verbose=False, debug=False)
+                              verbose=True, debug=False)
 
             print("Finish")
             with torch.no_grad():
@@ -129,8 +180,6 @@ class uncertainty_framework(object):
             self.aggregate_model = Net
         if self.aggregate_model is CNNRegressor:
             num_class = 1
-        elif self.aggregate_model is MLPRegressor:
-            num_class = 1
         else:
             num_class = self.testset.dataset.num_class
 
@@ -141,35 +190,72 @@ class uncertainty_framework(object):
         return aggregate_model
             
     def _get_vT(self, idx):
-        def ultility_compute(ic, item_train = {},seed=3):
-            if ic in item_train.keys():
-                return item_train[ic]
-            c = self.T[ic]
-            _set_random_seed(seed)
-            list_parties = utils.from_coalition_to_list([c])[0]
-            ds = load_dataset(list_parties, self.dataset, "dlconcat")
-            # n_label = ds.dataset.num_class
-            # if (n_label == 1):
-            #     targets  = self.testset.dataset.targets
-            #     rs = (ds.dataset.targets[0] == targets).sum().item()/(len(targets))
-            #     rs = torch.tensor(rs)
-            # else:
-            aggregate_model = self._init_aggregate_model()
-            acc, loss = aggregate_model.train_model(
-                ds, val_loader=self.testset, num_epochs=10, learning_rate=0.001, device = self.args.device)
-            rs = acc
-            if acc is None: # case regression 
-                rs = loss
-            if isinstance(rs, torch.FloatTensor):
-                rs = rs.cpu()
-            item_train.update({ic: rs})
-            return rs
-            
-        if self.v_T is None:
-            rs = [ultility_compute(ii, self.item_train, self.args.seed) for ii in idx]
-            return torch.tensor(rs) 
-        else:
-            return self.v_T[idx]
+        if self.v_T is not None:
+            return torch.tensor(self.v_T[idx])
+        
+        # Prepare shared data
+        T = self.T
+        dataset = self.dataset
+        testset = self.testset
+        arg_md = self.aggregate_model
+        item_train = self.item_train.copy()  # To avoid modifying shared dict during processing
+        seed = self.args.seed
+        
+        # Get available devices
+        devices = self.args.device_ids
+        # if devices is None: --> call the normal function
+        
+        
+        num_devices = len(devices)
+        if num_devices == 0:
+            devices = [None]  # Handle CPU if no devices are specified
+            num_devices = 1
+        
+        # Function to assign device based on chunk index
+        def assign_device(chunk_idx):
+            device_id = devices[chunk_idx % num_devices]
+            return f"cuda:{device_id}" if device_id is not None else 'cpu'
+        
+        # Define a helper function to wrap utility_compute with necessary arguments
+        def compute_chunk(chunk, chunk_idx):
+            device = assign_device(chunk_idx)
+            results = {}
+            for ic in chunk:
+                ic_result, rs = utility_compute(ic, T, dataset, testset, arg_md, item_train, seed, device)
+                results[ic_result] = rs
+            return results
+        
+        # Define a chunks generator
+        def chunks(lst, n):
+            """Yield successive n-sized chunks from lst."""
+            for i in range(0, len(lst), n):
+                yield lst[i:i + n]
+        
+        # Create chunks
+        chunk_size = self.args.chunk_size if hasattr(self.args, 'chunk_size') else 10  # Default chunk size
+        idx_chunks = list(chunks(idx, chunk_size))
+        
+        # Execute in parallel using joblib
+        parallel_results = Parallel(n_jobs=self.args.n_jobs, backend='loky')(
+            delayed(compute_chunk)(chunk, chunk_idx) for chunk_idx, chunk in enumerate(idx_chunks)
+        )
+        
+        # Merge all chunk results into a single dictionary
+        results = {}
+        for chunk_result in parallel_results:
+            results.update(chunk_result)
+        
+        # Update the shared item_train dictionary
+        self.item_train.update(results)
+        
+        # Optionally, update self.v_T if needed
+        self.v_T = results  # Uncomment if self.v_T should store all results
+        
+        # Extract results in the order of idx
+        rs_list = [results.get(ic, self.item_train.get(ic)) for ic in idx]
+        
+        return torch.tensor(rs_list)
+
     def select_first_coalition(self, remaining):
         ## Option 1: Random selection
         # C_star = np.random.choice(remaining)
@@ -464,10 +550,10 @@ def i_shapley_values(v, n_parties, idx ):
             idx_exclude = return_index(utils.from_list_to_coalitions(exclude_list, n_parties)[0], A)
             v_excl = v[idx_exclude]
         k = len(exclude_list)
-        # if v_incl < 0:
-        #     v_incl = 0
-        # if v_excl < 0:
-        #     v_excl = 0
+        if v_incl < 0:
+            v_incl = 0
+        if v_excl < 0:
+            v_excl = 0
         i_S = rCn(n_parties, len(exclude_list))*(v_incl - v_excl)
         # if i_S < 0:
         #     i_S = 0
