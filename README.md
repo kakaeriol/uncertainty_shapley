@@ -16,14 +16,16 @@ The framework display as following:
 ## Repository Structure
 ```
 ├── README.md
-├──                 
-│   ├── 
-│   ├── 
+├── notebook # where to demo the output/figure/image in our papers          
+│   ├── 01_create_ds
+│   ├── 00_fg2_intitution
+│   └── 01_figure_02_01
+├── our method # our package for GP methods which include our SSW and GP-binary kernel as well as NN-binary
+│   ├── my_gpytorch # our gpytorch library
+|   |   ├── kernels # some of our defined kernel here
+|   |   ├── mymodels # the models that we defined.
 │   └── 
-├──                    
-│   ├── 
-│   └── 
-└──                     
+└──  script # the example script to run our experiments                   
 ```
 ## Installation
 1. Clone this repository:
@@ -41,7 +43,12 @@ source venv/bin/activate  # For Linux/macOS
 pip install -r requirements.txt
 ```
 ## Usage
-
+1. Run experiment
+```
+python main.py --data ${data} --device ${device} --embd --n_projections 100  --output_dim ${dim} --model_aggregate ${model} --training_iteration 100 --kernel ${kernel} --n_random $j  --n_active 0 --out_dir ${out_dir} --seed $i
+```
+with ${data} is location for data, device: list of device gpu will be use, kernel can choose between "My_OTDD_SW_Kernel", "Exponential_SW_Kernel", "base", model_aggregate can choose between "Net", "MNIST_CNN", "ResNet_18_Classifier", "CNNRegressor", "MLPRegressor". 
+To evaluate all of the ulitly function, can set n_random = n_active = 0. 
 ## Citation
 If you use this code or data in your research, please cite:
 ```
