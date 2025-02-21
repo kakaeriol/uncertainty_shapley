@@ -47,8 +47,16 @@ pip install -r requirements.txt
 ```
 python main.py --data ${data} --device ${device} --embd --n_projections 100  --output_dim ${dim} --model_aggregate ${model} --training_iteration 100 --kernel ${kernel} --n_random $j  --n_active 0 --out_dir ${out_dir} --seed $i
 ```
-with ${data} is location for data, device: list of device gpu will be use, kernel can choose between "My_OTDD_SW_Kernel", "Exponential_SW_Kernel", "base", model_aggregate can choose between "Net", "MNIST_CNN", "ResNet_18_Classifier", "CNNRegressor", "MLPRegressor". 
-To evaluate all of the ulitly function, can set n_random = n_active = 0. 
+Where:
+${data}: Path or directory containing the dataset.
+${device}: GPU device(s) to be used (e.g., cuda:0).
+${model}: Choose among "Net", "MNIST_CNN", "ResNet_18_Classifier", "CNNRegressor", or "MLPRegressor".
+${kernel}: Choose one of "My_OTDD_SW_Kernel", "Exponential_SW_Kernel", or "base".
+To evaluate all utility functions without prediction, set:
+```
+n_random = 0
+n_active = 0
+```
 ## Citation
 If you use this code or data in your research, please cite:
 ```
